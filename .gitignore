@@ -1,0 +1,12 @@
+**samples
+**.ipynb_checkpoints
+**__pycache__
+**trained_models
+**data
+**validation_set
+**log*.txt
+**.pt
+**before_correction_backup
+**data_bf
+**data_rbf
+**venv
