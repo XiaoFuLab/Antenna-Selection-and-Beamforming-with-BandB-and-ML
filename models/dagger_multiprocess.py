@@ -1,3 +1,8 @@
+'''
+Imitation learning based training of the node classifier. 
+The training parameters can be modified from model.setting
+'''
+
 from models.setting import *
 
 from antenna_selection.observation import Observation, LinearObservation
@@ -136,8 +141,9 @@ class TrainDagger(object):
         best_t = 1000
         best_ogap = 1000
 
-        # FTRL
+        # FTPL
         # sigma = init_params_exp(self.policy, ETA_EXP, DEVICE)
+        
         model_folderpath = os.path.join(MODEL_PATH, 'genearl_N={},M={},L={}'.format(N, M, max_ant))
 
         if not os.path.isdir(model_folderpath):
@@ -246,13 +252,10 @@ class TrainDagger(object):
 
                     # Regularization parameter to ensure convergence in non-convex online learning
                     R_w = 0
-                    # # Uncomment the following two lines to include FTPL regularization 
-                    # for (param, sig) in zip(self.policy.parameters(), sigma):
-                    #     R_w += torch.dot(param.flatten(), sig.flatten())
-                    # print(out.shape, target.shape)
-                    # print(out, target)
-                    # print(out.squeeze().shape, target.to(torch.float).squeeze().shape)
-                    # print('len batch', batch_size)
+                    # Uncomment the following two lines to include FTPL regularization 
+                    for (param, sig) in zip(self.policy.parameters(), sigma):
+                        R_w += torch.dot(param.flatten(), sig.flatten())
+                   
                     for ind in range(len(out)):
                         if np.isnan(out.cpu().detach().numpy()[ind]):
                             num_vars = int(batch.variable_features.shape[0]/batch_size)
@@ -364,13 +367,6 @@ class TrainDagger(object):
             
 
 if __name__=='__main__':
-    # combinations = [(4, 2, 2),
-    #                 (4, 3, 2),
-    #                 (8, 3, 4),
-    #                 (8, 5, 4),
-    #                 # (8, 6, 4),
-    #                 (10, 8, 6)]
-
     combinations = [(10,4,6),]
 
     for (N,M,max_ant) in combinations:

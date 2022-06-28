@@ -33,8 +33,11 @@ if TASK =='beamforming':
     LOAD_MODEL_PATH = os.path.join(ROOT, 'antenna_selection/data_bf/trained_models/gnn2_iter_3')
 
     CLASS_IMBALANCE_WT = 11 # for 8,3,5 (N,M,L) use 11, for 12,6,5 max_ant use 11
-    ETA_EXP = 1.0
-    LAMBDA_ETA = 1e-5 # for 8,3,5 use 1e-4, for 12, 6, 8 use 1e-5
+
+    ETA_EXP = 100000000.0
+
+    # This is the weight given to the regularization term. In practice, setting this to 0 also seems to work just as well. 
+    LAMBDA_ETA = 1
 
 elif TASK =='robust_beamforming':
     ANTENNA_NFEATS = 4
@@ -53,6 +56,6 @@ elif TASK =='robust_beamforming':
     LOAD_MODEL_PATH = os.path.join(ROOT, 'robust_beamforming/data_rbf/trained_models/gnn2_iter_3')
 
     CLASS_IMBALANCE_WT = 11
-    ETA_EXP = 1.0
-    LAMBDA_ETA = 0 # for 8,3,5 use 1e-4, for 12, 6, 8 use 1e-5
+    ETA_EXP = 100000000.0
+    LAMBDA_ETA = 1 # for 8,3,5 use 1e-4, for 12, 6, 8 use 1e-5
  
