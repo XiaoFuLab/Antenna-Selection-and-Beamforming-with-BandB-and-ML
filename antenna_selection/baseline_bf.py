@@ -5,7 +5,10 @@ from antenna_selection.solve_relaxation_bf import solve_relaxed
 
 
 
-def as_omar(H, max_ant=5):
+def as_omar(H, 
+            max_ant=5,
+            min_sinr=1,
+            sigma_sq=1):
     lmbda_lb = 0
     lmbda_ub = 1e6
     # global lmbda_lb, lmbda_ub
@@ -73,7 +76,7 @@ def as_omar(H, max_ant=5):
         return None, mask.copy(), num_problems
     return obj, mask.copy(), num_problems
 
-def sparse_iteration(H, u, M=1000, noise_var=1, min_snr=1):
+def sparse_iteration(H, u, M=1000, sigma_sq=1, min_sinr=1):
     """
     Solves the relaxed formulation of Omar et al 2013
     """
@@ -85,8 +88,8 @@ def sparse_iteration(H, u, M=1000, noise_var=1, min_snr=1):
 
     zero = np.zeros(N)
     one = np.ones(N)
-    c_1 = (1/np.sqrt(min_snr*noise_var))
-    c_2 = (1/noise_var)
+    c_1 = (1/np.sqrt(min_sinr*sigma_sq))
+    c_2 = (1/sigma_sq)
 
     constraints = []
     for k in range(K):
@@ -106,7 +109,7 @@ def sparse_iteration(H, u, M=1000, noise_var=1, min_snr=1):
 
     return W.value, np.linalg.norm(W.value, 'fro')**2
 
-def sdp_omar(H, lmbda, u, M=1000, noise_var=1, min_snr=1):
+def sdp_omar(H, lmbda, u, M=1000, sigma_sq=1, min_sinr=1):
     """
     Solves the relaxed formulation of Omar et al 2013
     """
@@ -118,8 +121,8 @@ def sdp_omar(H, lmbda, u, M=1000, noise_var=1, min_snr=1):
 
     zero = np.zeros(N)
     one = np.ones(N)
-    c_1 = (1/np.sqrt(min_snr*noise_var))
-    c_2 = (1/noise_var)
+    c_1 = (1/np.sqrt(min_sinr*sigma_sq))
+    c_2 = (1/sigma_sq)
 
     constraints = []
     for k in range(K):

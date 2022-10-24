@@ -3,8 +3,8 @@ import os
 ROOT = '/scratch/sagar/Projects/Antenna-Selection-and-Beamforming-with-BandB-and-ML'
 
 # TASK =  # one of 'beamforming', 'robust_beamforming'
-# TASK = 'beamforming'
-TASK = 'robust_beamforming'
+TASK = 'beamforming'
+# TASK = 'robust_beamforming'
 
 DEBUG = False
 

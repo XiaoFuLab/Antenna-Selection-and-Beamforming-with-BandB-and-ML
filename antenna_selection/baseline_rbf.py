@@ -7,14 +7,14 @@ class ReweightedPenalty:
                 H=None, 
                 gamma=1, 
                 sigma_sq=2, 
-                epsi=0.3, 
+                robust_margin=0.3, 
                 max_ant= None):
-
+        assert H is not None and max_ant is not None, "required arguments channel matrix H or max_ant L not provided"
         self.H = H.copy()
         self.N, self.M = H.shape
         self.sigma_sq= sigma_sq*np.ones(self.M)
-        self.gamma= gamma*np.ones(self.M) #SINR levels, from -10dB to 20dB
-        self.epsi= epsi*np.ones(self.M)
+        self.gamma= gamma*np.ones(self.M) 
+        self.robust_margin= robust_margin*np.ones(self.M)
 
         self.max_ant = max_ant
 
@@ -111,8 +111,8 @@ class ReweightedPenalty:
             r = Q @ self.H[:,m:m+1]
             s = self.H[:,m:m+1].conj().T @ Q @ self.H[:,m:m+1] - self.sigma_sq[m:m+1]
             Z = cp.hstack((Q+t[m]*np.eye(self.N), r))
-            # Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-t[m:m+1]*epsi[m:m+1]**2 ))))
-            Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-cp.multiply(t[m:m+1], self.epsi[m:m+1]**2) ))))
+            # Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-t[m:m+1]*robust_margin[m:m+1]**2 ))))
+            Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-cp.multiply(t[m:m+1], self.robust_margin[m:m+1]**2) ))))
 
             constraints += [X[m] >> 0]
             constraints += [Z >> 0]
@@ -145,8 +145,8 @@ class ReweightedPenalty:
             r = Q @ self.H[:,m:m+1]
             s = self.H[:,m:m+1].conj().T @ Q @ self.H[:,m:m+1] - self.sigma_sq[m:m+1]
             Z = cp.hstack((Q+t[m]*np.eye(self.N), r))
-            # Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-t[m:m+1]*epsi[m:m+1]**2 ))))
-            Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-cp.multiply(t[m:m+1], self.epsi[m:m+1]**2) ))))
+            # Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-t[m:m+1]*robust_margin[m:m+1]**2 ))))
+            Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-cp.multiply(t[m:m+1], self.robust_margin[m:m+1]**2) ))))
 
             constraints += [X[m] >> 0]
             constraints += [Z >> 0]

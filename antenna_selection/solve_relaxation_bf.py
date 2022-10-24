@@ -141,7 +141,7 @@ class BeamformingWithSelectedAntennas():
 def solve_relaxed(H=None, 
                 z_mask=None, 
                 z_sol=None, 
-                gamma=1, 
+                min_sinr=1, 
                 sigma_sq=1):
     """
     Lower bound method that solves a smaller sized subproblem with selected and undecided antennas 
@@ -149,7 +149,7 @@ def solve_relaxed(H=None,
     N_original, M = H.shape
 
     # sigma_sq= sigma_sq*np.ones(M)
-    # gamma= gamma*np.ones(M) #SINR levels, from -10dB to 20dB
+    # min_sinr= min_sinr*np.ones(M) #SINR levels, from -10dB to 20dB
 
     H_short = H.copy()
     for n in range(N_original-1, -1, -1):
@@ -160,7 +160,7 @@ def solve_relaxed(H=None,
     assert num_off_ants<N_original, 'number of allowed antennas {} < 1'.format(N_original - num_off_ants)
     N = int(N_original - num_off_ants)
 
-    c_1 = (1/np.sqrt(gamma*sigma_sq))
+    c_1 = (1/np.sqrt(min_sinr*sigma_sq))
     c_2 = (1/sigma_sq)
 
     W = cp.Variable((N, M), complex=True, name='W')
@@ -176,7 +176,8 @@ def solve_relaxed(H=None,
     prob = cp.Problem(obj, constraints)
     try:
         prob.solve(solver=cp.MOSEK, verbose=False)
-    except:
+    except Exception as e:
+        print(e)
         return np.zeros(N_original), np.zeros((N_original,M)), np.inf, False
         
     if prob.status in ['infeasible', 'unbounded']:

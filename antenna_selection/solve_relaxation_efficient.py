@@ -7,15 +7,15 @@ import numpy as np
 
 class EfficientRelaxation:
     def __init__(self, H=None, 
-                gamma=1,
+                min_sinr=1,
                 sigma_sq=1, 
-                epsi=0.3,
-                robust=False):
-        self.robust = robust
+                robust_margin=0.1,
+                robust_beamforming=False):
+        self.robust_beamforming = robust_beamforming
         self.H = H.copy()
-        self.gamma = gamma
+        self.min_sinr = min_sinr
         self.sigma_sq = sigma_sq
-        self.epsi = epsi
+        self.robust_margin = robust_margin
         self.data = {}
         self.data['node'] = []
         self.data['solution'] = []
@@ -30,6 +30,7 @@ class EfficientRelaxation:
                         optimal=None):
         """
         Stores the solutions in RAM as a dictionary
+
         Does not save duplicate solutions. For example if the node is already present in the data, it does not store.
         """
         assert z_mask is not None and z_sol is not None, "Save solutions: one of the input is None"
@@ -40,7 +41,6 @@ class EfficientRelaxation:
     def print_nodes(self):
         for item in self.data['node']:
             print(item[0]*(1-item[1]))
-
 
     @staticmethod
     def _compare_nodes(z_mask_query, z_mask, z_sol_query, z_sol):
@@ -54,49 +54,29 @@ class EfficientRelaxation:
                 if np.sum(z_sol_query*remaining_antennas) == np.sum(remaining_antennas): # values of y_query should be 1 in the set A_query\A
                     return True
         return False
-        
-    # def _fetch_solution(z_mask=None,
-    #                 z_sol=None)
-    #     """
-    #     Fetch the solution from the data dictionary if already solved. 
-    #     Returns:
-    #         W_solution, objective_value, optimality, solution_found
-    #         None, None, False, False if could not find the solution in the solution dictionary
-    #     """
-    #     assert z_mask is not None and z_sol is not None, "Fetch solutions: one of the input is None"
-
 
     def solve_efficient(self, z_mask=None,
                         z_sol=None):
+        '''
+        Wrapper for solving the relaxed problems for BF and RBF
+        First checks whether an equivalent node problem has already been solved.
+        If so, it returns the stored solution, otherwise, it computes the new solution.
+        '''
         assert z_mask is not None and z_sol is not None, "Solve efficient: one of the input is None"
-        # print('total problems is {}, total unique problems {}'.format(self.num_problems, self.num_unique_problems))
+
         self.num_problems += 1
         for i in range(len(self.data['node'])):
             if self._compare_nodes(z_mask.copy(), self.data['node'][i][0], z_sol.copy(), self.data['node'][i][1]):
-                # print('matched z_mask_query {}, z_mask_stored {}, z_sol_query {}, z_sol_stored {}'.format(z_mask, self.data['node'][i][0], z_sol, self.data['node'][i][1]))
-                # print('solution', self.data['solution'][i])
-                # for j in range(len(self.data['node'])):
-                #     print(self.data['node'][j], self.data['solution'][j][2])
-
-                # z, W, obj, optimality = robust_channel_solve(H=self.H, 
-                #                                         z_mask=z_mask, 
-                #                                         z_sol=z_sol)
-                # z, W, obj, optimality = robust_channel_solve(H=self.H, 
-                #                                         z_mask=self.data['node'][i][0], 
-                #                                         z_sol=self.data['node'][i][1])
-                
-                
                 return z_sol.copy(), self.data['solution'][i][1], self.data['solution'][i][2], self.data['solution'][i][3]
-                # return z_sol.copy(), self.data['solution'][i][1:]
 
         self.num_unique_problems += 1
-        if self.robust:
+        if self.robust_beamforming:
             z, W, obj, optimality = robust_channel_solve(H=self.H, 
                                         z_mask=z_mask, 
                                         z_sol=z_sol, 
-                                        gamma=self.gamma, 
+                                        min_sinr=self.min_sinr, 
                                         sigma_sq=self.sigma_sq, 
-                                        epsi=self.epsi)
+                                        robust_margin=self.robust_margin)
             self._save_solutions(z_mask=z_mask.copy(), 
                                 z_sol=z_sol.copy(),
                                 z_result = z.copy(),
@@ -105,12 +85,10 @@ class EfficientRelaxation:
                                 optimal=optimality)
             return z, W, obj, optimality
         else:
-            print('calling solve relaxed')
-            print(z_mask, z_sol)
             z, W, obj, optimality = perfect_channel_solve(H=self.H, 
                                         z_mask=z_mask, 
                                         z_sol=z_sol, 
-                                        gamma=self.gamma, 
+                                        min_sinr=self.min_sinr, 
                                         sigma_sq=self.sigma_sq)
             self._save_solutions(z_mask=z_mask.copy(), 
                                 z_sol=z_sol.copy(),
@@ -122,8 +100,3 @@ class EfficientRelaxation:
             
     def get_total_problems(self):
         return self.num_unique_problems
-
-# def solve(H=None, 
-#             z_mask=None, 
-#             z_sol=None, 
-#             gamma=1, )

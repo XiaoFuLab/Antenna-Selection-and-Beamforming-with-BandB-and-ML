@@ -14,16 +14,19 @@ from models.setting import TASK, DEBUG
 
 class Node(object):
     def __init__(self, z_mask=None, z_sol=None, z_feas=None, W_sol=None, U=False, L=False, depth=0, parent_node=None, node_index = 0):
-        """
+        '''
         @params: 
-            z_mask: vector of boolean, True means that the current variable is boolean
-            z_sol: value of z at the solution of the cvx relaxation
-            z_feas: value of z after making z_sol feasible (i.e. boolean)
-            U: True if it is the current global upper bound
-            L: True if it is the current global lower bound
+            z_mask: vector of boolean, 1 means that the corresponding variable(antenna) is decided (= A U B in the paper)
+            z_sol: value of z at the solution of the cvx relaxation (1 if in A and 0 otherwise)
+            z_feas: value of z after making z_sol feasible (i.e. boolean with constraint satisfaction)
+            U: current global upper bound
+            L: current global lower bound
             depth: depth of the node from the root of the BB tree
             node_index: unique index assigned to the node in the BB tree
-        """
+            parent_node: reference to the parent Node objet
+            node_index: unique index to identify the node (and count them)
+        TODO: This could have been a named tuple.
+        '''
         self.z_mask = z_mask.copy()
         self.z_sol = z_sol.copy()
         self.z_feas = z_feas.copy()
@@ -48,33 +51,17 @@ class Node(object):
         return new_node
 
 class DefaultBranchingPolicy(object):
+    '''
+    Default Branching Policy: This policy returns the antenna index from the unselected antennas with the maximum power assigned. 
+    This is currently using Observation object in order to extract the current solution and the decided antenna set. 
+    (change this to Node, so the code is readable and and insensitive to change in Obervation class)
+    TODO: Convert it into a function as it no longer requires storing data for future computation.
+    '''
     def __init__(self):
         pass
 
-    # def select_variable(self, observation, candidates):
-    #     """
-    #     Select the antennas based on which antennas are being allocated the most power
-    #     W_incumbent is edge features 
-    #     """
-    #     N = observation.antenna_features.shape[0]
-    #     M = observation.variable_features.shape[0]
-
-    #     w_sol_real = observation.edge_features[:,6]
-    #     w_sol_imag = observation.edge_features[:,7]
-
-    #     W_sol = w_sol_real + 1j*w_sol_imag
-    #     W_sol = W_sol.reshape(N,M)
-
-    #     power_w = np.linalg.norm(W_sol, axis=1)
-
-    #     z_mask = observation.antenna_features[:, 2]
-    #     # z_sol = observation.antenna_features[:,0]
-
-    #     z_sol_rel = (1-z_mask)*power_w
-    #     return np.argmax(z_sol_rel)
-
     def select_variable(self, observation, candidates):
-        # Fetch W_sol
+        # Fetch W_sol, z_mask (= A U B in the paper) 
         N,M = observation.antenna_features.shape[0], observation.variable_features.shape[0]
         W_sol = observation.edge_features[:,6] + 1j*observation.edge_features[:,7]
         W_sol = W_sol.reshape((N,M))
@@ -83,10 +70,6 @@ class DefaultBranchingPolicy(object):
         z_sol = observation.antenna_features[:,0]
 
         power_w = np.linalg.norm(W_sol, axis=1)
-
-        # selecting maximum seems to be better but tested in single instance
-        # power_w = (1-z_mask)*power_w + z_mask*1000
-        # return np.argmin(power_w)
         
         power_w = (1-z_mask)*power_w 
         return np.argmax(power_w)
@@ -94,13 +77,18 @@ class DefaultBranchingPolicy(object):
 
 class BBenv(object):
     def __init__(self, observation_function=Observation, node_select_policy_path='default', epsilon=0.001):
-        """
+        '''
+        Initializes a B&B environment.
+        For solving several B&B problem instances, one needs to call the reset function with the problem instance parameters
         @params: 
+            observation_function: What kind of features to use (Linear for SVM and fully connecte, or Graph for GNN)
+                                    Graph based features is represented by Observation class.
             node_select_policy_path: one of {'default', 'oracle', policy_params}
                                      if the value is 'oracle', optimal solution should be provided in the reset function
                                      policy_params refers to the actual state_dict of the policy network
                                      appropriate policy_type should be given according the policy parameters provided in this argument
-        """
+            epsilon: The maximum gap between the global upper bound and global lower bound for the termination of the B&B algorithm.
+        '''
         self._is_reset = None
         self.epsilon = epsilon # stopping criterion 
         self.H = None
@@ -108,7 +96,7 @@ class BBenv(object):
         self.nodes = []     # list of problems (nodes)
         self.num_nodes = 0
         self.num_active_nodes = 0
-        self.all_nodes = [] # list of all nodes to serve as training data for node selection policy
+        self.all_nodes = []      # list of all nodes to serve as training data for node selection policy
         self.optimal_nodes = []
         self.node_index_count = 0
 
@@ -119,8 +107,7 @@ class BBenv(object):
         self.global_U = np.nan  # global upper bound        
 
         self.action_set_indices = None 
-        # current active node
-        self.active_node = None
+        self.active_node = None # current active node
 
         self.global_U_ind = None
         self.failed_reward = -2000
@@ -152,15 +139,18 @@ class BBenv(object):
         self.bm_solver = None
         
     def set_heuristic_solutions(self, solution):
-        """
-        Provide antenna selections provided by heuristic methods in order to incorporate them into the BB
-        """
+        '''
+        This method is used to help BB not prune the nodes that contain the solution provided by heuristic methods.
+        Provide antenna selections computed by heuristic methods in order to incorporate them into the BB
+        '''
         self.include_heuristic_solutions = True
         self.heuristic_solutions.append(solution)
 
 
-    def reset(self, instance, max_ant,  oracle_opt=None, robust_beamforming=False, gamma=1, robust_margin=0.3):
-        
+    def reset(self, instance, max_ant,  oracle_opt=None, robust_beamforming=False, min_sinr=1, sigma_sq=1, robust_margin=0.1):
+        '''
+        Solve new problem instance with given max_ant, min_sinr, sigma_sq, and robust_margin
+        '''
         # clear all variables
         self.H = None
         self.nodes = []  # list of problems (nodes)
@@ -178,18 +168,16 @@ class BBenv(object):
         self.num_nodes = 1
 
         self.H = instance
+
+        # TODO: Unify the representation of channel representation in all files
         self.H_complex = self.H[0,:,:] + self.H[1,:,:]*1j
 
+        # EfficientRelaxation saves the solutions so that the same lower or upper bound problem is not solved twice
         self.bm_solver = EfficientRelaxation(H=self.H_complex,
-                            epsi=robust_margin,
-                            gamma=gamma,
-                            robust=robust_beamforming)
-
-        # self.bm = Beamforming(self.H_complex, max_ant=max_ant)
-        # self.bm_with_antennas = BeamformingWithSelectedAntennas(self.H_complex, max_ant=max_ant)
-
-        # self.bm2 = Beamforming(self.H_complex, max_ant=max_ant)
-        # self.bm_with_antennas2 = BeamformingWithSelectedAntennas(self.H_complex, max_ant=max_ant)
+                            robust_margin=robust_margin,
+                            min_sinr=min_sinr,
+                            sigma_sq=sigma_sq,
+                            robust_beamforming=robust_beamforming)
 
         self.min_bound_gap = np.ones(self.H.shape[-1])*0.01
         
@@ -200,16 +188,12 @@ class BBenv(object):
         self._is_reset = True
         self.action_set_indices = np.arange(1,self.N)
 
-        # boolean vars corresponding to each antenna denoting its selection if True
         z_mask = np.zeros(self.N)
         # values of z (selection var) at the z_mask locations
         # for the root node it does not matter
         z_sol = np.zeros(self.N)
 
-        done = False
-        # [z, W, lower_bound, optimal] = solve_rsdr(H=self.H_complex, z_mask=z_mask, z_sol=z_sol)
         [z, W, lower_bound, optimal] = self.bm_solver.solve_efficient(z_mask=z_mask, z_sol=z_sol)
-
 
         self.global_L = lower_bound
         self.z_incumbent = self.get_feasible_z(W_sol=W, 
@@ -217,9 +201,7 @@ class BBenv(object):
                                             z_mask=z_mask,
                                             max_ant=self.max_ant)
 
-        # [_, W_feas, self.global_U, optimal] = solve_rsdr(H=self.H_complex, z_mask=np.ones(self.N), z_sol=self.z_incumbent)
         [_, W_feas, self.global_U, optimal] = self.bm_solver.solve_efficient(z_mask=np.ones(self.N), z_sol=self.z_incumbent)
-
 
         if not self.global_U == np.inf:
             self.W_incumbent = W_feas.copy()
@@ -235,32 +217,22 @@ class BBenv(object):
         self.U_list.append(self.global_U)
         self.all_nodes.append(self.active_node)
 
-        done = False
-        if self.is_terminal():
-            done = True
-        reward = 0
-
-        observation = self.observation_function().extract(self)
-
         if oracle_opt is not None:
             self.oracle_opt = oracle_opt
         else:
             self.oracle_opt = np.zeros(self.N)
-        self.z_ref = np.array([ 0, 0, 1, 0, 0, 1, 1, 0])
-        return 
 
-    def push_children(self, action_id, node_id, parallel=False):
-        
+    def push_children(self, var_id, node_id, parallel=False):
+        '''
+        Creates two children and appends it to the node list. Also executes fathom condition.
+        @params:
+            var_id: selected variable (in our case, antenna) to branch on
+            node_id: selected node to branch on
+            parallel: whether to run the node computations in parallel
+        '''
         self.delete_node(node_id)
-        if action_id == None:
+        if var_id == None:
             return
-        
-        # if self.is_optimal(self.active_node, oracle_opt=self.z_ref):
-        #     print('\n*******************')
-        #     print('optimal node')
-        #     print('*******************\n')
-        #     print(self.active_node.z_mask)
-        #     print(self.active_node.z_sol)
         
         if sum(self.active_node.z_mask*self.active_node.z_sol) == self.max_ant:
             print('\n #####################')
@@ -287,16 +259,16 @@ class BBenv(object):
             
         else:
             z_mask_left = self.active_node.z_mask.copy()
-            z_mask_left[action_id] = 1
+            z_mask_left[var_id] = 1
 
             z_mask_right = self.active_node.z_mask.copy()
-            z_mask_right[action_id] = 1
+            z_mask_right[var_id] = 1
 
             z_sol_left = self.active_node.z_sol.copy()
-            z_sol_left[action_id] = 0
+            z_sol_left[var_id] = 0
 
             z_sol_right = self.active_node.z_sol.copy()
-            z_sol_right[action_id] = 1
+            z_sol_right[var_id] = 1
 
             if sum(z_sol_right*z_mask_right) == self.max_ant:
                 z_sol_right = z_sol_right*z_mask_right
@@ -311,7 +283,6 @@ class BBenv(object):
         if DEBUG:
             print('expanding node id {}, children {}, lb {}, z_inc {}'.format(self.active_node.node_index, (self.active_node.z_mask, self.active_node.z_sol), self.active_node.L, self.z_incumbent))
         
-      
         children_stats = []
         t1 = time.time()
         for subset in children_sets:
@@ -330,7 +301,8 @@ class BBenv(object):
                 self.all_nodes.append(new_node)
         
         if len(self.nodes) == 0:
-            print('zero nodes')
+            if DEBUG:
+                print('all nodes exhausted')
             return
 
         # Update the global upper and lower bound 
@@ -345,13 +317,12 @@ class BBenv(object):
             self.W_incumbent = children_stats[min_U_index][3].copy()
 
     def create_children(self, constraint_set):
-        """
+        '''
         Create the Node with the constraint set
         Compute the local lower and upper bounds 
-        return the computed bounds for the calling function to update
-        """
+        return the computed bounds to the calling function to update
+        '''
         z_mask, z_sol = constraint_set 
-        # print('children mask sol', z_mask, z_sol)
         
         # check if the maximum number of antennas are already selected or all antennas are already assigned (z is fully assigned)
         if np.sum(z_mask*np.round(z_sol))==self.max_ant or np.sum(z_mask*(1 - np.round(z_sol))) == len(z_mask) - self.max_ant:
@@ -360,8 +331,6 @@ class BBenv(object):
             elif np.sum(z_mask*(1 - np.round(z_sol))) == len(z_mask) - self.max_ant:
                 z_sol = np.round(z_sol)*z_mask + (1-np.round(z_sol))*(1-z_mask)
 
-
-            # [_, W, L, optimal] = solve_rsdr(H=self.H_complex, z_mask=np.ones(self.N), z_sol=z_sol)
             [_, W, L, optimal] = self.bm_solver.solve_efficient(z_mask=np.ones(self.N), z_sol=z_sol)
 
             # check this constraint
@@ -369,14 +338,10 @@ class BBenv(object):
                 print('antennas: {} not optimal, may be infeasible'.format(None))
                 return np.inf, np.inf, np.zeros(self.N), np.zeros(self.N), None
 
-            # if not L >= self.active_node.L - self.epsilon:
-            #     print('asserting', L >= self.active_node.L - self.epsilon, constraint_set, self.active_node.z_mask, self.active_node.z_sol)
-            #     time.sleep(5)
             assert L >= self.active_node.L - self.epsilon, 'selected antennas: lower bound of child node less than that of parent'
 
             z_feas = z_sol.copy()
 
-            #TODO: implement get_objective
             U = self.get_objective(W, z_feas)
 
             # create and append node
@@ -396,10 +361,8 @@ class BBenv(object):
             return np.inf, np.inf, np.zeros(self.N), np.zeros(self.N), None
 
         else:
-            # [z, W, L, optimal] = solve_rsdr(H = self.H_complex, z_sol=z_sol, z_mask=z_mask)
             [z, W, L, optimal] = self.bm_solver.solve_efficient(z_sol=z_sol, z_mask=z_mask)
-            
-            # check this constraint                                                                    
+                                                         
             if not optimal:
                 if DEBUG:
                     print('relaxed: not optimal', z,L,optimal)
@@ -420,10 +383,6 @@ class BBenv(object):
                                             z_mask=z_mask,
                                             max_ant=self.max_ant)
 
-                # [_, W_feas, L_feas_relaxed, optimal] =  solve_rsdr(H=self.H_complex,
-                #                                                 z_mask=np.ones(self.N),
-                #                                                 z_sol=z_feas)
-            
                 [_, W_feas, L_feas_relaxed, optimal] =  self.bm_solver.solve_efficient(z_mask=np.ones(self.N), z_sol=z_feas)
             
                 if optimal:
@@ -449,38 +408,45 @@ class BBenv(object):
                 return np.inf, np.inf, np.zeros(self.N), np.zeros(self.N), None
 
     def get_objective(self, W, z_feas):
-        # print(z_feas, W)
         return np.linalg.norm(W*np.expand_dims(z_feas, 1), 'fro')**2
 
     def set_node_select_policy(self, node_select_policy_path='default', policy_type='gnn'):
+        '''
+        what policy to use for node selection
+        @params: 
+            node_select_policy_path: one of ('default', 'oracle', gnn_node_policy_parameters)
+                                        'default' -> use the lowest lower bound first policy
+                                        'oracle' -> select the optimal node (optimal solution should be provided in the reset function)
+                                        gnn_node_policy_parameters -> If neither of the above two arguments, this method assumes 
+                                            that gnn classifier parameters have been provided
+        '''
         if node_select_policy_path=='default':
             self.node_select_policy = 'default'
         elif node_select_policy_path == 'oracle':
             self.node_select_policy = 'oracle'
         else:
             self.node_select_model = GNNNodeSelectionPolicy()
-            # self.node_select_model.load_state_dict(node_select_policy_path.state_dict())
-            print('setting policy path', node_select_policy_path)
+            if DEBUG:
+                print('setting policy path', node_select_policy_path)
             model_state_dict = torch.load(node_select_policy_path)
             self.node_select_model.load_state_dict(model_state_dict)
             self.node_select_policy = 'ml_model'
 
     def select_variable_default(self):
+        '''
+        Currently this method is not being used for default variable selection. 
+        '''
         z_sol_rel = (1-self.active_node.z_mask)*(np.abs(self.active_node.z_sol - 0.5))
         return np.argmax(z_sol_rel)
 
-
-
     def select_node(self):
+        '''
+        Default node selection method
+        TODO: the fathom method has been moved from here. So the loop is not needed
+        '''
         node_id = 0
-        while len(self.nodes)>0:
-            node_id = self.rank_nodes()
-            # fathomed = self.fathom(node_id)
-            # if fathomed:
-            #     print('fathomed')
-            #     continue
-            self.active_node = self.nodes[node_id]
-            break
+        node_id = self.rank_nodes()
+        self.active_node = self.nodes[node_id]
         return node_id, self.observation_function().extract(self), self.is_optimal(self.active_node)
 
 
@@ -557,16 +523,16 @@ class BBenv(object):
             return False
 
     def default_node_select(self):
-        """
+        '''
         Use the node with the lowest lower bound
-        """
+        '''
         return np.argmin(self.L_list)
 
     @staticmethod
     def get_feasible_z(W_sol=None, z_mask=None, z_sol=None, max_ant=None):
-        """
+        '''
         Selects the antennas that have been assigned the maximum power in the solution of W
-        """
+        '''
 
         power_w = np.linalg.norm(W_sol, axis=1)
         power_w = (1-z_mask)*power_w
@@ -613,30 +579,20 @@ def solve_bb(instance, max_ant=5, max_iter=10000, policy='default', policy_type=
         
         if len(env.nodes) == 0:
             break
-        # prune_node = env.prune(node_feats)
-        # if prune_node:
-        #     env.delete_node(node_id)
-        #     continue
-        # else:
+
         branching_var = branching_policy.select_variable(node_feats, env.action_set_indices)
         done = env.push_children(branching_var, node_id, parallel=False)
         timestep = timestep+1
         lb_list.append(env.global_L)
         ub_list.append(env.global_U)
-        print('\ntimestep', timestep, env.global_U, env.global_L)
+        print('\ntimestep: {}, global U: {}, global L: {}'.format(timestep, env.global_U, env.global_L))
         if env.is_terminal():
             break
-
-    print('ended')
-    # print('the solved problems are:')
-    # env.bm_solver.print_nodes()
-    # print(env.z_incumbent)
-    # returns the solution, objective value, timestep and the time taken
     return env.z_incumbent.copy(), env.global_U, timestep , time.time()-t1, lb_list, ub_list, env.bm_solver.get_total_problems()
 
 if __name__ == '__main__':
     # np.random.seed(seed = 100)
-    robust_beamforming = True
+    robust_beamforming = False
     if TASK == 'beamforming':
         robust_beamforming = False
     N = 8
@@ -654,6 +610,5 @@ if __name__ == '__main__':
         t_avg += t
         tstep_avg += timesteps
 
-    print(u_avg, t_avg, tstep_avg, u_avg, num_problems)
+    print('\nAverage global U: {} avg time: {}, avg timesteps: {}, avg num problems: {}'.format(u_avg, t_avg, tstep_avg, num_problems))
 
-    # print('bb solution: {}, optimal: {}'.format(global_U, optimal_f) )
