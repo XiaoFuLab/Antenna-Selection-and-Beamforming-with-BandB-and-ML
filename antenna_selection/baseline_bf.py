@@ -3,8 +3,6 @@ import numpy as np
 # from beamforming import solve_beamforming_with_selected_antennas
 from antenna_selection.solve_relaxation_bf import solve_relaxed
 
-
-
 def as_omar(H, 
             max_ant=5,
             min_sinr=1,
@@ -25,7 +23,7 @@ def as_omar(H,
         print('sparse iteration  {}'.format(r))
         r += 1
         u = u_new.copy()
-        W, _ = sparse_iteration(H, u)
+        W, _ = sparse_iteration(H, u, sigma_sq=sigma_sq, min_sinr=min_sinr)
         a = np.linalg.norm(W, axis=1)
         mask = (a>0.01)*1
         if mask.sum()<= max_ant:
@@ -48,7 +46,7 @@ def as_omar(H,
         # if mask.sum() < max_ant:
         lmbda = lmbda_lb + (lmbda_ub - lmbda_lb)/2
         try:
-            W, _ = sdp_omar(H, lmbda, u_new)
+            W, _ = sdp_omar(H, lmbda, u_new, sigma_sq=sigma_sq, min_sinr=min_sinr)
         except:
             print('here inside exception')
             break
@@ -97,9 +95,6 @@ def sparse_iteration(H, u, M=1000, sigma_sq=1, min_sinr=1):
         Imask[k,k] = 0
         constraints += [c_1*cp.real(np.expand_dims(H[:,k], axis=0).conj() @ W[:,k]) >= cp.norm(cp.hstack((c_2*(W @ Imask).H @ H[:,k], np.ones(1))), 2)]
 
-    # for k in range(K):
-    #     constraints += [c_1*cp.real(np.expand_dims(H[:,k], axis=0) @ W[:,k]) >= cp.norm(cp.hstack((c_2*W.H @ H[:,k], np.ones(1))), 2)]
-        
     prob = cp.Problem(obj, constraints)
     prob.solve(solver=cp.MOSEK, verbose=False)
     

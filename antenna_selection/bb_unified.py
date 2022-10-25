@@ -147,7 +147,14 @@ class BBenv(object):
         self.heuristic_solutions.append(solution)
 
 
-    def reset(self, instance, max_ant,  oracle_opt=None, robust_beamforming=False, min_sinr=1, sigma_sq=1, robust_margin=0.1):
+    def reset(self, 
+                instance, 
+                max_ant,  
+                oracle_opt=None, 
+                robust_beamforming=False, 
+                min_sinr=1.0, 
+                sigma_sq=1.0, 
+                robust_margin=0.1):
         '''
         Solve new problem instance with given max_ant, min_sinr, sigma_sq, and robust_margin
         '''
@@ -410,7 +417,7 @@ class BBenv(object):
     def get_objective(self, W, z_feas):
         return np.linalg.norm(W*np.expand_dims(z_feas, 1), 'fro')**2
 
-    def set_node_select_policy(self, node_select_policy_path='default', policy_type='gnn'):
+    def set_node_select_policy(self, node_select_policy_path='default'):
         '''
         what policy to use for node selection
         @params: 
@@ -549,7 +556,14 @@ class BBenv(object):
         z_feas[np.flip(np.argsort(power_w))[:max_ant-used_ant]] = 1 
         return z_feas
 
-def solve_bb(instance, max_ant=5, max_iter=10000, policy='default', policy_type='gnn',  oracle_opt=None, robust_beamforming=False, robust_margin=0.1):
+def solve_bb(instance, 
+                max_ant=5, 
+                max_iter=10000, 
+                policy_type='gnn',  
+                robust_beamforming=False, 
+                robust_margin=None,
+                min_sinr=1.0,
+                sigma_sq=1.0):
     t1 = time.time()
     if policy_type == 'default':
         env = BBenv(observation_function=Observation, epsilon=0.01)
@@ -563,7 +577,12 @@ def solve_bb(instance, max_ant=5, max_iter=10000, policy='default', policy_type=
 
     t1 = time.time()
 
-    env.reset(instance, max_ant=max_ant, robust_beamforming=robust_beamforming, robust_margin=robust_margin)
+    env.reset(instance, 
+                max_ant=max_ant, 
+                robust_beamforming=robust_beamforming, 
+                robust_margin=robust_margin,
+                min_sinr=min_sinr,
+                sigma_sq=sigma_sq)
     timestep = 0
     done = False
     lb_list = []
@@ -588,7 +607,7 @@ def solve_bb(instance, max_ant=5, max_iter=10000, policy='default', policy_type=
         print('\ntimestep: {}, global U: {}, global L: {}'.format(timestep, env.global_U, env.global_L))
         if env.is_terminal():
             break
-    return env.z_incumbent.copy(), env.global_U, timestep , time.time()-t1, lb_list, ub_list, env.bm_solver.get_total_problems()
+    return env.z_incumbent.copy(), env.global_U, time.time()-t1, env.bm_solver.get_total_problems()
 
 if __name__ == '__main__':
     # np.random.seed(seed = 100)
@@ -605,10 +624,9 @@ if __name__ == '__main__':
     for i in range(1):
         H = (np.random.randn(N, M) + 1j*np.random.randn(N,M))/np.sqrt(2)
         instance = np.stack((np.real(H), np.imag(H)), axis=0)
-        _, global_U, timesteps, t, lb_list, ub_list, num_problems = solve_bb(instance, max_ant=max_ant, max_iter = 10000, robust_beamforming=robust_beamforming)
+        _, global_U, t, num_problems = solve_bb(instance, max_ant=max_ant, max_iter = 10000, robust_beamforming=robust_beamforming)
         u_avg += global_U
         t_avg += t
-        tstep_avg += timesteps
 
-    print('\nAverage global U: {} avg time: {}, avg timesteps: {}, avg num problems: {}'.format(u_avg, t_avg, tstep_avg, num_problems))
+    print('\nAverage global U: {} avg time: {}, avg num problems: {}'.format(u_avg, t_avg, num_problems))
 
