@@ -3,14 +3,19 @@ import numpy as np
 # from beamforming import solve_beamforming_with_selected_antennas
 from antenna_selection.solve_relaxation_bf import solve_relaxed
 
-def as_omar(H, 
+def cvx_baseline(H, 
             max_ant=5,
-            min_sinr=1,
-            sigma_sq=1):
+            min_sinr=1.0,
+            sigma_sq=1.0):
+    '''
+    Implementation of Mehanna et al., 2013 as a basline
+    '''
+    if len(H.shape) == 3:
+        H = H[0,::] + 1j*H[1,::]
     lmbda_lb = 0
     lmbda_ub = 1e6
     # global lmbda_lb, lmbda_ub
-    N,K = H.shape
+    N, _ = H.shape
 
     # step 1
     u = np.zeros((N,1))
@@ -18,7 +23,7 @@ def as_omar(H,
     r = 0
     max_iter = 30
     num_problems = 0
-    while np.linalg.norm(u-u_new)>0.0001 and r < max_iter:
+    while np.linalg.norm(u-u_new)>0.00001 and r < max_iter:
     # while r < max_iter:
         print('sparse iteration  {}'.format(r))
         r += 1
@@ -37,7 +42,7 @@ def as_omar(H,
     #     return
     before_iter_ant_count = mask.sum()
     if mask.sum() > max_ant:
-        return None, mask.copy(), num_problems
+        return {'objective':None, 'solution': mask.copy(), 'num_problems':num_problems}
     # step 2
     r = 0
     max_iter = 50
@@ -66,15 +71,13 @@ def as_omar(H,
     after_iter_ant_count = mask.sum()
 
     # step 3
-    _, W, obj, opt = solve_relaxed(H, z_mask=np.ones(N), z_sol = mask)
+    _, W, obj, opt = solve_relaxed(H, z_mask=np.ones(N), z_sol = mask, min_sinr=min_sinr, sigma_sq=sigma_sq)
     print(obj)
-    print('Before lambda iteration: {}'.format(before_iter_ant_count))
-    print('After lambda iteration: {}'.format(after_iter_ant_count))
     if mask.sum() > max_ant:
-        return None, mask.copy(), num_problems
-    return obj, mask.copy(), num_problems
+        return {'objective': None, 'solution': mask.copy(), 'num_problems': num_problems}
+    return {'objective': obj, 'solution': mask.copy(), 'num_problems': num_problems}
 
-def sparse_iteration(H, u, M=1000, sigma_sq=1, min_sinr=1):
+def sparse_iteration(H, u, M=1000, sigma_sq=1.0, min_sinr=1.0):
     """
     Solves the relaxed formulation of Omar et al 2013
     """
@@ -104,7 +107,7 @@ def sparse_iteration(H, u, M=1000, sigma_sq=1, min_sinr=1):
 
     return W.value, np.linalg.norm(W.value, 'fro')**2
 
-def sdp_omar(H, lmbda, u, M=1000, sigma_sq=1, min_sinr=1):
+def sdp_omar(H, lmbda, u, M=1000, sigma_sq=1.0, min_sinr=1.0):
     """
     Solves the relaxed formulation of Omar et al 2013
     """
@@ -141,6 +144,6 @@ if __name__=='__main__':
     N, K = 8,8
     max_ant = 4
     H = (np.random.randn(N, K) + 1j*np.random.randn(N, K))/np.sqrt(2)
-    as_omar(H, max_ant=max_ant)
+    cvx_baseline(H, max_ant=max_ant)
     # W, obj = sdp_omar(H, 50, np.ones((N,1)))
     # print(np.linalg.norm(W, axis=1), obj)

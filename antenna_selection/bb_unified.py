@@ -614,17 +614,24 @@ if __name__ == '__main__':
     robust_beamforming = False
     if TASK == 'beamforming':
         robust_beamforming = False
-    N = 8
-    M = 3
-    max_ant = 5
-    
+    N = 10
+    M = 6
+    max_ant = 6
+    min_sinr = 10
+    sigma_sq = 0.1
+
     u_avg = 0
     t_avg = 0
     tstep_avg = 0
     for i in range(1):
         H = (np.random.randn(N, M) + 1j*np.random.randn(N,M))/np.sqrt(2)
         instance = np.stack((np.real(H), np.imag(H)), axis=0)
-        _, global_U, t, num_problems = solve_bb(instance, max_ant=max_ant, max_iter = 10000, robust_beamforming=robust_beamforming)
+        _, global_U, t, num_problems = solve_bb(instance, 
+                                                max_ant=max_ant, 
+                                                max_iter = 10000, 
+                                                robust_beamforming=robust_beamforming,
+                                                min_sinr=min_sinr,
+                                                sigma_sq=sigma_sq)
         u_avg += global_U
         t_avg += t
 
