@@ -176,11 +176,8 @@ class BBenv(object):
 
         self.H = instance
 
-        # TODO: Unify the representation of channel representation in all files
-        self.H_complex = self.H[0,:,:] + self.H[1,:,:]*1j
-
         # EfficientRelaxation saves the solutions so that the same lower or upper bound problem is not solved twice
-        self.bm_solver = EfficientRelaxation(H=self.H_complex,
+        self.bm_solver = EfficientRelaxation(H=self.H,
                             robust_margin=robust_margin,
                             min_sinr=min_sinr,
                             sigma_sq=sigma_sq,
@@ -191,7 +188,7 @@ class BBenv(object):
         self.max_ant = max_ant
 
         # number of transmitters and users
-        _, self.N, self.M = self.H.shape 
+        self.N, self.M = self.H.shape 
         self._is_reset = True
         self.action_set_indices = np.arange(1,self.N)
 
@@ -213,7 +210,7 @@ class BBenv(object):
         if not self.global_U == np.inf:
             self.W_incumbent = W_feas.copy()
         else:
-            self.W_incumbent = np.zeros(self.H_complex.shape)
+            self.W_incumbent = np.zeros(self.H.shape)
 
         self.active_node = Node(z_mask=z_mask, z_sol=z, z_feas=self.z_incumbent, W_sol = W, U=self.global_U, L=lower_bound, depth=1, node_index=self.node_index_count) 
         self.current_opt_node = self.active_node
@@ -607,31 +604,32 @@ def solve_bb(instance,
         print('\ntimestep: {}, global U: {}, global L: {}'.format(timestep, env.global_U, env.global_L))
         if env.is_terminal():
             break
-    return env.z_incumbent.copy(), env.global_U, time.time()-t1, env.bm_solver.get_total_problems()
+    return {'solution': env.z_incumbent.copy(), 'objective': env.global_U, 'time': time.time()-t1, 'num_problems': env.bm_solver.get_total_problems()}
 
 if __name__ == '__main__':
-    # np.random.seed(seed = 100)
-    robust_beamforming = False
-    if TASK == 'beamforming':
-        robust_beamforming = False
-    N = 10
-    M = 6
+    np.random.seed(seed = 100)
+    robust_beamforming = True
+    # if TASK == 'beamforming':
+    #     robust_beamforming = False
+    N = 8
+    M = 8
     max_ant = 6
-    min_sinr = 10
+    min_sinr = 10.0
     sigma_sq = 0.1
+    robust_margin = 0.01
 
     u_avg = 0
     t_avg = 0
     tstep_avg = 0
     for i in range(1):
-        H = (np.random.randn(N, M) + 1j*np.random.randn(N,M))/np.sqrt(2)
-        instance = np.stack((np.real(H), np.imag(H)), axis=0)
+        instance = (np.random.randn(N, M) + 1j*np.random.randn(N,M))/np.sqrt(2)
         _, global_U, t, num_problems = solve_bb(instance, 
                                                 max_ant=max_ant, 
                                                 max_iter = 10000, 
                                                 robust_beamforming=robust_beamforming,
                                                 min_sinr=min_sinr,
-                                                sigma_sq=sigma_sq)
+                                                sigma_sq=sigma_sq,
+                                                robust_margin=robust_margin)
         u_avg += global_U
         t_avg += t
 

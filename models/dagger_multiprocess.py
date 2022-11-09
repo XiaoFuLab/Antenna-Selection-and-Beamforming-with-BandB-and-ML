@@ -21,8 +21,10 @@ import os
 
 from dagger_collect_data_multiprocess import DataCollect
 from torch.distributions import Exponential
-
+from antenna_selection.utils import TrainParameters
 torch.set_num_threads(1)
+
+MAIN_FOLDER_FORMAT = 'general_N={},M={},L={}'
 
 def init_params_exp(policy, eta, device=DEVICE):
     sigma = []
@@ -32,24 +34,24 @@ def init_params_exp(policy, eta, device=DEVICE):
     return sigma
 
 class TrainDagger(object):
-    def __init__(self, train_filepath=os.path.join(DATA_PATH, 'dagger_train/'), policy_type='gnn', result_filepath=RESULT_PATH, N=12, M=6, max_ant=None):
+    def __init__(self, MAIN_FOLDERPATH=os.path.join(DATA_PATH, 'dagger_train/'), policy_type='gnn', result_filepath=RESULT_PATH, parameters: TrainParameters = None):
         """
         Runs dagger for imitating optimal node pruning policy 
         @params: 
             policy_type: one of {'linear', 'gnn'}
         """
+        self.MAIN_FOLDERPATH = MAIN_FOLDERPATH
         # train instances should be a list of tuples (H, w_opt) 
         self.NodeDataset = GraphNodeDataset
         self.DataLoader = torch_geometric.data.DataLoader
         self.NodePolicy = GNNNodeSelectionPolicy
-    
 
-        if not os.path.isdir(train_filepath):
-            Path(train_filepath).mkdir(exist_ok=True)
+        if not os.path.isdir(MAIN_FOLDERPATH):
+            Path(MAIN_FOLDERPATH).mkdir(exist_ok=True)
 
         # training data is inside policy_data and the oracle solutions are inside oracle_data 
-        self.train_filepath = os.path.join(train_filepath, 'policy_data')
-        self.valid_filepath = os.path.join(train_filepath, 'valid_policy_data')
+        self.train_filepath = os.path.join(MAIN_FOLDERPATH, 'policy_data')
+        self.valid_filepath = os.path.join(MAIN_FOLDERPATH, 'valid_policy_data')
 
 
         if os.path.isdir(self.train_filepath):
@@ -76,61 +78,53 @@ class TrainDagger(object):
             self.policy.load_state_dict(torch.load(LOAD_MODEL_PATH))
         self.policy = self.policy.to(DEVICE)
 
-        self.M = M
-        self.N = N
-        self.max_ant = max_ant
+        self.parameters = parameters
+        self.N, self.M, self.max_ant = parameters.train_size
 
         self.performance_list = []
 
-        self.instances = instance_generator(self.M, self.N)
-
         self.result_filename  = os.path.join(result_filepath, 'general_result_M={}_N={}_L={}.txt'.format(self.M, self.N, self.max_ant))
         file_handle = open(self.result_filename, 'a')
-        file_handle.write('iter_count, train_ogap, train_time_speedup, train_timestep_speedup, valid_ogap, valid_time_speedup, valid_timestep_speedup, train_acc, valid_acc, train_loss, valid_loss, train_fpr, valid_fpr, train_fnr, valid_fnr \n')
+        file_handle.write('iter_count, train_ogap, train_time_speedup, train_problems_speedup, valid_ogap, valid_time_speedup, valid_problems_speedup, train_acc, valid_acc, train_loss, valid_loss, train_fpr, valid_fpr, train_fnr, valid_fnr \n')
         file_handle.close()
         # self.csv_writer = csv.writer(file_handle)
-        # self.csv_writer.writerow(('iter_count', 'ogap', 'speedup', 'timestep_speedup'))
+        # self.csv_writer.writerow(('iter_count', 'ogap', 'speedup', 'problems_speedup'))
         
 
 
         if policy_type=='gnn':
             self.train_data_collector = DataCollect(observation_function=Observation, 
-                                                    max_ant=self.max_ant, 
-                                                    policy='oracle', 
+                                                    parameters=self.parameters,
                                                     train_filepath=self.train_filepath, 
                                                     policy_type=self.policy_type,
-                                                    oracle_solution_filepath=os.path.join(train_filepath, 'oracle_data'),
+                                                    oracle_solution_filepath=os.path.join(MAIN_FOLDERPATH, 'oracle_data'),
                                                     num_instances=DAGGER_NUM_TRAIN_EXAMPLES_PER_ITER)
 
             self.valid_data_collector = DataCollect(observation_function=Observation, 
-                                                    max_ant=self.max_ant, 
-                                                    policy='oracle', 
+                                                    parameters=self.parameters,
                                                     train_filepath=self.valid_filepath, 
                                                     policy_type=self.policy_type,
-                                                    oracle_solution_filepath=os.path.join(train_filepath, 'valid_oracle_data'),
+                                                    oracle_solution_filepath=os.path.join(MAIN_FOLDERPATH, 'valid_oracle_data'),
                                                     num_instances=DAGGER_NUM_TRAIN_EXAMPLES_PER_ITER)
         elif policy_type=='linear':
             self.train_data_collector = DataCollect(observation_function=LinearObservation, 
-                                                    max_ant=self.max_ant, 
-                                                    policy='oracle', 
+                                                    parameters=self.parameters,
                                                     train_filepath=self.train_filepath, 
                                                     policy_type=self.policy_type,
                                                     num_instances=DAGGER_NUM_TRAIN_EXAMPLES_PER_ITER,
-                                                    oracle_solution_filepath=os.path.join(train_filepath, 'oracle_data'))
+                                                    oracle_solution_filepath=os.path.join(MAIN_FOLDERPATH, 'oracle_data'))
 
             self.valid_data_collector = DataCollect(observation_function=LinearObservation, 
-                                                    max_ant=self.max_ant, 
-                                                    policy='oracle', 
+                                                    parameters=self.parameters,
                                                     train_filepath=self.valid_filepath, 
                                                     policy_type=self.policy_type,
-                                                    oracle_solution_filepath=os.path.join(train_filepath, 'valid_oracle_data'),
+                                                    oracle_solution_filepath=os.path.join(MAIN_FOLDERPATH, 'valid_oracle_data'),
                                                     num_instances=DAGGER_NUM_TRAIN_EXAMPLES_PER_ITER)
         else:
             raise NotImplementedError
             
         
-        self.learning_rate = 0.001
-        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=LEARNING_RATE)
         pass
     
     def train(self, train_epochs=10, iterations=30):
@@ -144,10 +138,10 @@ class TrainDagger(object):
         # FTPL
         # sigma = init_params_exp(self.policy, ETA_EXP, DEVICE)
         
-        model_folderpath = os.path.join(MODEL_PATH, 'genearl_N={},M={},L={}'.format(N, M, max_ant))
+        model_folderpath = os.path.join(MODEL_PATH, MAIN_FOLDER_FORMAT.format(*self.parameters.train_size))
 
         if not os.path.isdir(model_folderpath):
-            Path(model_folderpath).mkdir(exist_ok = True)
+            os.makedirs(model_folderpath, exist_ok=True)
 
         train_loss = 0
         valid_loss = 0
@@ -178,45 +172,37 @@ class TrainDagger(object):
             # Path(valid_filepath).mkdir(exist_ok=True)
             
             # data collection stage
-            time_speedup, ogap, timestep_speedup = self.train_data_collector.collect_data(self.instances, 
-                                                                        num_instances=DAGGER_NUM_TRAIN_EXAMPLES_PER_ITER, 
+            train_metric = self.train_data_collector.collect_data(num_instances=DAGGER_NUM_TRAIN_EXAMPLES_PER_ITER, 
                                                                         policy=policy)
             
-            valid_time_speedup, valid_ogap, valid_timestep_speedup = self.valid_data_collector.collect_data(self.instances, 
-                                                            num_instances=DAGGER_NUM_VALID_EXAMPLES_PER_ITER, 
+            valid_metric = self.valid_data_collector.collect_data(num_instances=DAGGER_NUM_VALID_EXAMPLES_PER_ITER, 
                                                             policy=policy, 
                                                             train=False)
             if not first_round:
-                # if time_speedup<best_t :
-                #     best_t = time_speedup
-                if ogap < best_ogap:
-                    best_ogap = ogap
-                    best_t = time_speedup            
+                if train_metric['ogap'] < best_ogap:
+                    best_ogap = train_metric['ogap']
+                    best_t = train_metric['time_speedup']            
 
             # TODO: add train loss, valid loss, valid ogap, speedup, timesteps_speedup
-            print('ogap: {}, time_speedup: {}, best ogap: {}, best time_speedup: {}, timestep_speedup: {}'.format(ogap, time_speedup, best_ogap, best_t, timestep_speedup))
-            print('VALID ogap: {}, time_speedup: {}, timestep_speedup: {}'.format(valid_ogap, valid_time_speedup, valid_timestep_speedup))
+            print('ogap: {}, time_speedup: {}, best ogap: {}, best time_speedup: {}, problems_speedup: {}'.format(train_metric['ogap'], train_metric['time_speedup'], best_ogap, best_t, train_metric['problems_speedup']))
+            print('VALID ogap: {}, time_speedup: {}, problems_speedup: {}'.format(valid_metric['ogap'], valid_metric['time_speedup'], valid_metric['problems_speedup']))
 
-            # self.csv_writer.writerow((iter_count, ogap, time_speedup, timestep_speedup))
+            # self.csv_writer.writerow((iter_count, ogap, time_speedup, problems_speedup))
             file_handle = open(self.result_filename, 'a')
-            file_handle.write('{:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f} \n'.format(iter_count, ogap, time_speedup, timestep_speedup, valid_ogap, valid_time_speedup, valid_timestep_speedup, train_acc, valid_acc, train_loss, valid_loss, train_fpr, valid_fpr, train_fnr, valid_fnr))
+            file_handle.write('{:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f}, {:<.7f} \n'.format(iter_count, train_metric['ogap'], train_metric['time_speedup'], train_metric['problems_speedup'], valid_metric['ogap'], valid_metric['time_speedup'], valid_metric['problems_speedup'], train_acc, valid_acc, train_loss, valid_loss, train_fpr, valid_fpr, train_fnr, valid_fnr))
             file_handle.close()
             
             if not first_round:
-                self.performance_list.append((ogap, timestep_speedup))
+                self.performance_list.append((train_metric['ogap'], train_metric['problems_speedup']))
 
-            # self.valid_data_collector.collect_data(self.instances, num_instances=DAGGER_NUM_VALID_EXAMPLES_PER_ITER, policy=policy)
-            
             train_files = [str(path) for path in Path(self.train_filepath).glob('sample_*.pkl')]            
             valid_files = [str(path) for path in Path(self.valid_filepath).glob('sample_*.pkl')]
-            
-
+ 
             self.train_data = self.NodeDataset(train_files)
             self.train_loader = self.DataLoader(self.train_data, batch_size=128, shuffle=True)
 
             self.valid_data = self.NodeDataset(valid_files)
             self.valid_loader = self.DataLoader(self.valid_data, batch_size=128, shuffle=True)
-
 
             self.policy = self.policy.train().to(DEVICE)
 
@@ -253,8 +239,8 @@ class TrainDagger(object):
                     # Regularization parameter to ensure convergence in non-convex online learning
                     R_w = 0
                     # Uncomment the following two lines to include FTPL regularization 
-                    for (param, sig) in zip(self.policy.parameters(), sigma):
-                        R_w += torch.dot(param.flatten(), sig.flatten())
+                    # for (param, sig) in zip(self.policy.parameters(), sigma):
+                    #     R_w += torch.dot(param.flatten(), sig.flatten())
                    
                     for ind in range(len(out)):
                         if np.isnan(out.cpu().detach().numpy()[ind]):
@@ -367,13 +353,20 @@ class TrainDagger(object):
             
 
 if __name__=='__main__':
-    combinations = [(10,4,6),]
+    train_parameters = [TrainParameters(robust_beamforming=True,
+                                train_size=(8,3,4),
+                                sigma_sq=1.0,
+                                min_sinr=200.0,
+                                robust_margin=0.1),
+    ]
 
-    for (N,M,max_ant) in combinations:
+    for param in train_parameters:
         np.random.seed(100)
-        # N, M, max_ant = 8,6,4
-        train_filepath = os.path.join(DATA_PATH, 'general_N={},M={},L={}/'.format(N,M,max_ant))
-        dagger = TrainDagger(train_filepath=train_filepath, policy_type='gnn', N=N, M=M, max_ant=max_ant)
+        MAIN_FOLDERPATH = os.path.join(DATA_PATH, MAIN_FOLDER_FORMAT.format(*param.train_size))
+        if not os.path.isdir(MAIN_FOLDERPATH):
+            os.makedirs(MAIN_FOLDERPATH, exist_ok=True)
+            print('directory created')
+        dagger = TrainDagger(MAIN_FOLDERPATH=MAIN_FOLDERPATH, policy_type='gnn', parameters=param)
         dagger.train()
 
 

@@ -25,9 +25,9 @@ class Observation(object):
         # edge features
         self.edge_index = np.stack((np.repeat(np.arange(model.N), model.M), np.tile(np.arange(model.M), model.N)))
         self.edge_features = np.zeros((model.M*model.N, 9))
-        self.edge_features[:,0] = np.real(model.H_complex.reshape(-1))
-        self.edge_features[:,1] = np.imag(model.H_complex.reshape(-1))
-        self.edge_features[:,2] = np.abs(model.H_complex.reshape(-1))
+        self.edge_features[:,0] = np.real(model.H.reshape(-1))
+        self.edge_features[:,1] = np.imag(model.H.reshape(-1))
+        self.edge_features[:,2] = np.abs(model.H.reshape(-1))
 
         self.edge_features[:,3] = np.real(model.W_incumbent.reshape(-1))
         self.edge_features[:,4] = np.imag(model.W_incumbent.reshape(-1))
@@ -49,7 +49,7 @@ class Observation(object):
         self.variable_features[:,2] = (local_upper_bound - global_upper_bound) < model.epsilon 
 
         # local features
-        W_H = np.matmul(model.active_node.W_sol.conj().T, model.H_complex)
+        W_H = np.matmul(model.active_node.W_sol.conj().T, model.H)
         W_H = np.abs(W_H)
         mask = np.eye(*W_H.shape)
         mask_comp = 1-mask
@@ -58,7 +58,7 @@ class Observation(object):
         # aggregate_interference = np.sum(interference, axis=1)
         aggregate_interference = np.sum(interference, axis=0)
 
-        H_w = np.matmul(model.H_complex.conj().T, model.active_node.W_sol)
+        H_w = np.matmul(model.H.conj().T, model.active_node.W_sol)
         self.variable_features[:,3] = np.squeeze(direct)
         self.variable_features[:,4] = np.squeeze(aggregate_interference)
         self.variable_features[:,5] = model.active_node.depth

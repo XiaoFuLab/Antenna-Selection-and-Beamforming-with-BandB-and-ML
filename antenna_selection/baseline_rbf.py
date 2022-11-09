@@ -5,15 +5,16 @@ from antenna_selection.solve_relaxation_rbf import *
 class ReweightedPenalty:
     def __init__(self, 
                 H=None, 
-                gamma=1, 
+                min_sinr=1, 
                 sigma_sq=2, 
                 robust_margin=0.3, 
                 max_ant= None):
         assert H is not None and max_ant is not None, "required arguments channel matrix H or max_ant L not provided"
         self.H = H.copy()
+        # self.H = H[0,::] + 1j*H[1,::]
         self.N, self.M = H.shape
         self.sigma_sq= sigma_sq*np.ones(self.M)
-        self.gamma= gamma*np.ones(self.M) 
+        self.min_sinr= min_sinr*np.ones(self.M) 
         self.robust_margin= robust_margin*np.ones(self.M)
 
         self.max_ant = max_ant
@@ -30,7 +31,7 @@ class ReweightedPenalty:
         
         r = 0
         max_iter = 30
-        while np.linalg.norm(U-U_new, 'fro')>0.0001 and r < max_iter:
+        while np.linalg.norm(U-U_new, 'fro')>0.00001 and r < max_iter:
         # while r < max_iter:
             print('sparse iteration  {}'.format(r))
             r += 1
@@ -38,7 +39,7 @@ class ReweightedPenalty:
             X_tilde = self.sparse_iteration(U)
             self.num_sdps += 1
             if X_tilde is None:
-                return None, np.zeros(self.N), self.num_sdps
+                return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps}
 
             a = np.diag(X_tilde)
             mask = (a>0.01)*1
@@ -49,10 +50,9 @@ class ReweightedPenalty:
 
         prelim_mask = mask.copy()
         before_iter_ant_count = mask.sum()
-        print('mask after sparse iteration {}'.format(mask))
         if mask.sum() > self.max_ant:
             # sparse enough solution not found!
-            return None, mask.copy(), self.num_sdps
+            return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps}
 
         # step 2
         r = 0
@@ -81,19 +81,18 @@ class ReweightedPenalty:
         print('num selected antennas', mask.sum())
 
         after_iter_ant_count = mask.sum()
-        print(mask)
         # step 3
         _, W, obj, optimal = solve_rsdr(H=self.H, 
                                         z_mask=np.ones(self.N), 
-                                        z_sol=mask )
-        print(obj)
-        print('Before lambda iteration: {}'.format(before_iter_ant_count))
-        print('After lambda iteration: {}'.format(after_iter_ant_count))
+                                        z_sol=mask,
+                                        sigma_sq=self.sigma_sq,
+                                        min_sinr=self.min_sinr,
+                                        robust_margin=self.robust_margin
+                                        )
         
         if mask.sum() > self.max_ant:
-            return None, mask.copy(), self.num_sdps
-        return obj.copy(), mask.copy(), self.num_sdps
-
+            return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps}
+        return {'objective': obj, 'solution': mask.copy(), 'num_problems': self.num_sdps}
 
     def sparse_iteration(self, U):
         
@@ -107,7 +106,7 @@ class ReweightedPenalty:
         
         constraints = []
         for m in range(self.M):
-            Q = (1+1/self.gamma[m])*X[m] - cp.sum(X)
+            Q = (1+1/self.min_sinr[m])*X[m] - cp.sum(X)
             r = Q @ self.H[:,m:m+1]
             s = self.H[:,m:m+1].conj().T @ Q @ self.H[:,m:m+1] - self.sigma_sq[m:m+1]
             Z = cp.hstack((Q+t[m]*np.eye(self.N), r))
@@ -141,7 +140,7 @@ class ReweightedPenalty:
         
         constraints = []
         for m in range(self.M):
-            Q = (1+1/self.gamma[m])*X[m] - cp.sum(X)
+            Q = (1+1/self.min_sinr[m])*X[m] - cp.sum(X)
             r = Q @ self.H[:,m:m+1]
             s = self.H[:,m:m+1].conj().T @ Q @ self.H[:,m:m+1] - self.sigma_sq[m:m+1]
             Z = cp.hstack((Q+t[m]*np.eye(self.N), r))

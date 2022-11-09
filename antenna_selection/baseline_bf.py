@@ -1,6 +1,6 @@
 import cvxpy as cp
 import numpy as np
-# from beamforming import solve_beamforming_with_selected_antennas
+import time
 from antenna_selection.solve_relaxation_bf import solve_relaxed
 
 def cvx_baseline(H, 
@@ -10,8 +10,7 @@ def cvx_baseline(H,
     '''
     Implementation of Mehanna et al., 2013 as a basline
     '''
-    if len(H.shape) == 3:
-        H = H[0,::] + 1j*H[1,::]
+    start_time = time.time()
     lmbda_lb = 0
     lmbda_ub = 1e6
     # global lmbda_lb, lmbda_ub
@@ -23,8 +22,8 @@ def cvx_baseline(H,
     r = 0
     max_iter = 30
     num_problems = 0
-    while np.linalg.norm(u-u_new)>0.00001 and r < max_iter:
-    # while r < max_iter:
+    # while np.linalg.norm(u-u_new)>0.00001 and r < max_iter:
+    while r < max_iter:
         print('sparse iteration  {}'.format(r))
         r += 1
         u = u_new.copy()
@@ -42,7 +41,7 @@ def cvx_baseline(H,
     #     return
     before_iter_ant_count = mask.sum()
     if mask.sum() > max_ant:
-        return {'objective':None, 'solution': mask.copy(), 'num_problems':num_problems}
+        return {'objective':None, 'solution': mask.copy(), 'num_problems':num_problems, 'time': time.time()-start_time}
     # step 2
     r = 0
     max_iter = 50
@@ -74,8 +73,8 @@ def cvx_baseline(H,
     _, W, obj, opt = solve_relaxed(H, z_mask=np.ones(N), z_sol = mask, min_sinr=min_sinr, sigma_sq=sigma_sq)
     print(obj)
     if mask.sum() > max_ant:
-        return {'objective': None, 'solution': mask.copy(), 'num_problems': num_problems}
-    return {'objective': obj, 'solution': mask.copy(), 'num_problems': num_problems}
+        return {'objective': None, 'solution': mask.copy(), 'num_problems': num_problems, 'time': time.time()-start_time}
+    return {'objective': obj, 'solution': mask.copy(), 'num_problems': num_problems, 'time': time.time()-start_time}
 
 def sparse_iteration(H, u, M=1000, sigma_sq=1.0, min_sinr=1.0):
     """

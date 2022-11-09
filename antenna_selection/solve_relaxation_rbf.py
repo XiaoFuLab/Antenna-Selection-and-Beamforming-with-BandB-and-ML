@@ -7,19 +7,20 @@ import models.helper as helper
 def solve_rsdr(H=None, 
                 z_mask=None, 
                 z_sol=None, 
-                gamma=1, 
-                sigma_sq=1, 
-                epsi=0.3):
+                min_sinr=1.0, 
+                sigma_sq=1.0, 
+                robust_margin=0.1):
     """
-    z_mask and z_sol determined the antennas that need to be turned off
+    z_mask and z_sol determin the antennas that need to be turned off
     if z_mask[n] = 1 and z_sol[n] = 0, then the antenna needs to be turned off
-    """
 
+    Returns: z_sol(just for backward compatibility with old code, ignore this), optimal W, objective, bool (whether solution was obtained) 
+    """
     N_original, M = H.shape
 
     sigma_sq= sigma_sq*np.ones(M)
-    gamma= gamma*np.ones(M) #SINR levels, from -10dB to 20dB
-    epsi= epsi*np.ones(M)
+    min_sinr= min_sinr*np.ones(M) #SINR levels, from -10dB to 20dB
+    robust_margin= robust_margin*np.ones(M)
 
     H_short = H.copy()
     for n in range(N_original-1, -1, -1):
@@ -39,12 +40,12 @@ def solve_rsdr(H=None,
     obj = cp.Minimize(cp.real(cp.sum([cp.trace(Xi) for Xi in X])))
     constraints = []
     for m in range(M):
-        Q = (1+1/gamma[m])*X[m] - cp.sum(X)
+        Q = (1+1/min_sinr[m])*X[m] - cp.sum(X)
         r = Q @ H_short[:,m:m+1]
         s = H_short[:,m:m+1].conj().T @ Q @ H_short[:,m:m+1] - sigma_sq[m:m+1]
         Z = cp.hstack((Q+t[m]*np.eye(N), r))
-        # Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-t[m:m+1]*epsi[m:m+1]**2 ))))
-        Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-cp.multiply(t[m:m+1],epsi[m:m+1]**2) ))))
+        # Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-t[m:m+1]*robust_margin[m:m+1]**2 ))))
+        Z = cp.vstack((Z, cp.hstack((cp.conj(cp.transpose(r)), s-cp.multiply(t[m:m+1],robust_margin[m:m+1]**2) ))))
 
         constraints += [X[m] >> 0]
         constraints += [Z >> 0]

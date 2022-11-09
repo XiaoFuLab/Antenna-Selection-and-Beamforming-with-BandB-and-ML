@@ -9,6 +9,8 @@ def solve_relaxed(H=None,
                 sigma_sq=1.0):
     """
     Lower bound method that solves a smaller sized subproblem with selected and undecided antennas 
+    Returns: z_sol(just for backward compatibility with old code, ignore this), optimal W, objective, bool (whether solution was obtained) 
+
     """
     N_original, M = H.shape
 
@@ -19,7 +21,7 @@ def solve_relaxed(H=None,
     for n in range(N_original-1, -1, -1):
         if z_mask[n] and not z_sol[n]:
             H_short = np.concatenate((H_short[:n, :], H_short[n+1:, :]), axis=0)
-    # print(H_short)
+    
     num_off_ants = np.sum(z_mask*(1-z_sol))
     assert num_off_ants<N_original, 'number of allowed antennas {} < 1'.format(N_original - num_off_ants)
     N = int(N_original - num_off_ants)
@@ -35,6 +37,7 @@ def solve_relaxed(H=None,
         Imask = np.eye(M)
         Imask[m,m] = 0
         constraints += [c_1*cp.real(np.expand_dims(H_short[:,m], axis=0).conj() @ W[:,m]) >= cp.norm(cp.hstack((c_2*((W @ Imask).H) @ H_short[:,m], np.ones(1))), 2)]
+
 
     prob = cp.Problem(obj, constraints)
     try:
