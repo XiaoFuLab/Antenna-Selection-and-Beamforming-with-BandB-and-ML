@@ -2,11 +2,14 @@ import cvxpy as cp
 import numpy as np
 import time
 from antenna_selection.solve_relaxation_bf import solve_relaxed
+from antenna_selection.utils import post_process
+
 
 def cvx_baseline(H, 
             max_ant=5,
             min_sinr=1.0,
-            sigma_sq=1.0):
+            sigma_sq=1.0,
+            max_iter=30):
     '''
     Implementation of Mehanna et al., 2013 as a basline
     '''
@@ -20,39 +23,42 @@ def cvx_baseline(H,
     u = np.zeros((N,1))
     u_new = np.ones((N,1))
     r = 0
-    max_iter = 30
     num_problems = 0
     # while np.linalg.norm(u-u_new)>0.00001 and r < max_iter:
     while r < max_iter:
-        print('sparse iteration  {}'.format(r))
+        print('Sparse iteration  {}'.format(r))
         r += 1
         u = u_new.copy()
         W, _ = sparse_iteration(H, u, sigma_sq=sigma_sq, min_sinr=min_sinr)
         a = np.linalg.norm(W, axis=1)
         mask = (a>0.01)*1
         if mask.sum()<= max_ant:
-            print('exiting here')
+            print('Sparse enough solution found. Exiting sparse iteration...')
             break
         u_new = 1/(np.linalg.norm(W, axis=1) + 1e-5)
     prelim_mask = mask.copy()
 
     num_problems = r
-    # if mask.sum() > max_ant:
-    #     return
-    before_iter_ant_count = mask.sum()
+    
     if mask.sum() > max_ant:
-        return {'objective':None, 'solution': mask.copy(), 'num_problems':num_problems, 'time': time.time()-start_time}
+        post_result = post_process(H,
+                                    mask,
+                                    max_ant=max_ant,
+                                    sigma_sq=sigma_sq,
+                                    min_sinr=min_sinr,
+                                    robust_beamforming=False)
+        return {'objective':post_result['objective'], 'solution': post_result['solution'], 'num_problems':num_problems, 'time': time.time()-start_time}
     # step 2
     r = 0
     max_iter = 50
-    while mask.sum() != max_ant and r < max_iter:
+    while mask.sum() < max_ant and r < max_iter:
         r += 1
         # if mask.sum() < max_ant:
         lmbda = lmbda_lb + (lmbda_ub - lmbda_lb)/2
         try:
             W, _ = sdp_omar(H, lmbda, u_new, sigma_sq=sigma_sq, min_sinr=min_sinr)
         except:
-            print('here inside exception')
+            print('Exception occured')
             break
         a = np.linalg.norm(W, axis=1)
         mask = (a>0.01)*1
@@ -67,13 +73,12 @@ def cvx_baseline(H,
         mask = prelim_mask.copy()    
     print('num selected antennas', mask.sum())
     num_problems += r
-    after_iter_ant_count = mask.sum()
 
+    # if mask.sum() > max_ant:
+    #     return {'objective': None, 'solution': mask.copy(), 'num_problems': num_problems, 'time': time.time()-start_time}
     # step 3
     _, W, obj, opt = solve_relaxed(H, z_mask=np.ones(N), z_sol = mask, min_sinr=min_sinr, sigma_sq=sigma_sq)
     print(obj)
-    if mask.sum() > max_ant:
-        return {'objective': None, 'solution': mask.copy(), 'num_problems': num_problems, 'time': time.time()-start_time}
     return {'objective': obj, 'solution': mask.copy(), 'num_problems': num_problems, 'time': time.time()-start_time}
 
 def sparse_iteration(H, u, M=1000, sigma_sq=1.0, min_sinr=1.0):
@@ -140,9 +145,22 @@ def sdp_omar(H, lmbda, u, M=1000, sigma_sq=1.0, min_sinr=1.0):
     return W.value, np.linalg.norm(W.value, 'fro')**2
 
 if __name__=='__main__':
-    N, K = 8,8
+    from antenna_selection.bb_unified import solve_bb
+    num_trials = 5
+    N, K = 8,4
     max_ant = 4
-    H = (np.random.randn(N, K) + 1j*np.random.randn(N, K))/np.sqrt(2)
-    cvx_baseline(H, max_ant=max_ant)
-    # W, obj = sdp_omar(H, 50, np.ones((N,1)))
-    # print(np.linalg.norm(W, axis=1), obj)
+    sigma_sq=0.1
+    min_sinr=10.0
+
+    ogaps = []
+    for i in range(num_trials):
+        H = (np.random.randn(N, K) + 1j*np.random.randn(N, K))/np.sqrt(2)
+        out_cvx = cvx_baseline(H, max_ant=max_ant, sigma_sq=sigma_sq, min_sinr=min_sinr)
+        out_bb = solve_bb(H, 
+                            max_ant=max_ant,
+                            robust_beamforming=False,
+                            robust_margin=0.02,
+                            min_sinr=min_sinr,
+                            sigma_sq=sigma_sq)
+        ogaps.append((out_cvx['objective'] - out_bb['objective'])/out_bb['objective']*100)
+    print('avg ogap ', np.mean(ogaps))

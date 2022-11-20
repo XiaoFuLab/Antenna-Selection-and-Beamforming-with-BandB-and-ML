@@ -612,8 +612,8 @@ if __name__ == '__main__':
     # if TASK == 'beamforming':
     #     robust_beamforming = False
     N = 8
-    M = 8
-    max_ant = 6
+    M = 4
+    max_ant = 4
     min_sinr = 10.0
     sigma_sq = 0.1
     robust_margin = 0.01

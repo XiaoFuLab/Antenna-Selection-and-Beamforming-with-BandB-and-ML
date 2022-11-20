@@ -138,7 +138,7 @@ class TrainDagger(object):
         # FTPL
         # sigma = init_params_exp(self.policy, ETA_EXP, DEVICE)
         
-        model_folderpath = os.path.join(MODEL_PATH, MAIN_FOLDER_FORMAT.format(*self.parameters.train_size))
+        model_folderpath = os.path.join(MODEL_PATH, MAIN_FOLDER_FORMAT.format(*self.parameters.train_size) + '_sinr:{}'.format(self.parameters.min_sinr))
 
         if not os.path.isdir(model_folderpath):
             os.makedirs(model_folderpath, exist_ok=True)
@@ -353,20 +353,44 @@ class TrainDagger(object):
             
 
 if __name__=='__main__':
-    train_parameters = [TrainParameters(robust_beamforming=True,
-                                train_size=(8,3,4),
-                                sigma_sq=1.0,
-                                min_sinr=200.0,
-                                robust_margin=0.1),
-    ]
+    train_parameters = [
+                        # TrainParameters(robust_beamforming=True,
+                        #         train_size=(8,4,4),
+                        #         sigma_sq=0.1,
+                        #         min_sinr=1000.0,
+                        #         robust_margin=0.02),
+                        # TrainParameters(robust_beamforming=True,
+                        #         train_size=(8,4,4),
+                        #         sigma_sq=0.1,
+                        #         min_sinr=2000.0,
+                        #         robust_margin=0.02),
+                        # TrainParameters(robust_beamforming=True,
+                        #         train_size=(8,4,4),
+                        #         sigma_sq=0.1,
+                        #         min_sinr=3000.0,
+                        #         robust_margin=0.02),
+                        # TrainParameters(robust_beamforming=True,
+                        #         train_size=(8,4,4),
+                        #         sigma_sq=0.1,
+                        #         min_sinr=4000.0,
+                        #         robust_margin=0.02),
+                        # TrainParameters(robust_beamforming=True,
+                        #         train_size=(8,4,4),
+                        #         sigma_sq=0.1,
+                        #         min_sinr=5000.0,
+                        #         robust_margin=0.02),
+                        TrainParameters(robust_beamforming=True,
+                                train_size=(16,6,6),
+                                sigma_sq=0.1,
+                                min_sinr=10.0,
+                                robust_margin=0.02),
+                        ]
 
     for param in train_parameters:
         np.random.seed(100)
-        MAIN_FOLDERPATH = os.path.join(DATA_PATH, MAIN_FOLDER_FORMAT.format(*param.train_size))
+        MAIN_FOLDERPATH = os.path.join(DATA_PATH, MAIN_FOLDER_FORMAT.format(*param.train_size)+ '_sinr:{}'.format(param.min_sinr))
         if not os.path.isdir(MAIN_FOLDERPATH):
             os.makedirs(MAIN_FOLDERPATH, exist_ok=True)
             print('directory created')
         dagger = TrainDagger(MAIN_FOLDERPATH=MAIN_FOLDERPATH, policy_type='gnn', parameters=param)
         dagger.train()
-
-

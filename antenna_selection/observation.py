@@ -40,8 +40,12 @@ class Observation(object):
 
         # construct variable features
         # global features
+        # global_upper_bound = -1000 if model.global_U == np.inf else model.global_U
+        # local_upper_bound =  -1000 if model.active_node.U == np.inf else model.active_node.U
+        
         global_upper_bound = 1000 if model.global_U == np.inf else model.global_U
         local_upper_bound =  2000 if model.active_node.U == np.inf else model.active_node.U
+
 
         self.variable_features = np.zeros((model.M, 8))
         self.variable_features[:,0] = model.global_L # global lower bound
@@ -63,6 +67,7 @@ class Observation(object):
         self.variable_features[:,4] = np.squeeze(aggregate_interference)
         self.variable_features[:,5] = model.active_node.depth
 
+        # self.variable_features[:, 6] = -1000 if model.active_node.L == np.inf else model.active_node.L
         self.variable_features[:, 6] = 0 if model.active_node.L == np.inf else model.active_node.L
         self.variable_features[:, 7] = local_upper_bound
         

@@ -1,23 +1,24 @@
 import cvxpy as cp
 import numpy as np
 from antenna_selection.solve_relaxation_rbf import *
+from antenna_selection.utils import *
 
 class ReweightedPenalty:
     def __init__(self, 
                 H=None, 
                 min_sinr=1, 
-                sigma_sq=2, 
-                robust_margin=0.3, 
+                sigma_sq=1, 
+                robust_margin=0.1, 
                 max_ant= None):
         assert H is not None and max_ant is not None, "required arguments channel matrix H or max_ant L not provided"
         self.H = H.copy()
-        # self.H = H[0,::] + 1j*H[1,::]
         self.N, self.M = H.shape
         self.sigma_sq= sigma_sq*np.ones(self.M)
         self.min_sinr= min_sinr*np.ones(self.M) 
         self.robust_margin= robust_margin*np.ones(self.M)
 
         self.max_ant = max_ant
+        self.max_iter = 30
 
         self.epsilon = 1e-5
         self.lmbda_lb = 0
@@ -30,16 +31,20 @@ class ReweightedPenalty:
         U_new = np.ones((self.N, self.N))
         
         r = 0
-        max_iter = 30
-        while np.linalg.norm(U-U_new, 'fro')>0.00001 and r < max_iter:
+        start_time = time.time()
+        mask = np.ones(self.N)
+        while np.linalg.norm(U-U_new, 'fro')>0.00001 and r < self.max_iter:
         # while r < max_iter:
             print('sparse iteration  {}'.format(r))
             r += 1
             U = U_new.copy()
-            X_tilde = self.sparse_iteration(U)
             self.num_sdps += 1
+            try:
+                X_tilde = self.sparse_iteration(U)
+            except:
+                X_tilde = None
             if X_tilde is None:
-                return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps}
+                return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps, 'time': time.time()-start_time}
 
             a = np.diag(X_tilde)
             mask = (a>0.01)*1
@@ -49,15 +54,23 @@ class ReweightedPenalty:
             U_new = 1/(X_tilde + self.epsilon)
 
         prelim_mask = mask.copy()
-        before_iter_ant_count = mask.sum()
         if mask.sum() > self.max_ant:
             # sparse enough solution not found!
-            return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps}
+            post_result = post_process(self.H,
+                                        mask,
+                                        max_ant=self.max_ant,
+                                        sigma_sq=self.sigma_sq[0],
+                                        min_sinr=self.min_sinr[0],
+                                        robust_margin=self.robust_margin[0],
+                                        robust_beamforming=True)
+            return {'objective':post_result['objective'], 'solution': post_result['solution'], 'num_problems':self.num_sdps, 'time': time.time()-start_time}
+
+            # return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps}
 
         # step 2
         r = 0
-        max_iter = 30
-        while mask.sum() != self.max_ant and r < max_iter:
+        max_iter_lambda = 30
+        while mask.sum() != self.max_ant and r < max_iter_lambda:
             r += 1
             lmbda = self.lmbda_lb + (self.lmbda_ub - self.lmbda_lb)/2
             X_tilde = self.solve_sdps_with_soft_as(lmbda, U_new)
@@ -80,19 +93,20 @@ class ReweightedPenalty:
             mask = prelim_mask.copy()    
         print('num selected antennas', mask.sum())
 
-        after_iter_ant_count = mask.sum()
         # step 3
-        _, W, obj, optimal = solve_rsdr(H=self.H, 
+        _, W, obj, solved = solve_rsdr(H=self.H, 
                                         z_mask=np.ones(self.N), 
                                         z_sol=mask,
                                         sigma_sq=self.sigma_sq,
                                         min_sinr=self.min_sinr,
                                         robust_margin=self.robust_margin
                                         )
-        
-        if mask.sum() > self.max_ant:
-            return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps}
-        return {'objective': obj, 'solution': mask.copy(), 'num_problems': self.num_sdps}
+        if solved:
+            return {'objective': obj, 'solution': mask.copy(), 'num_problems': self.num_sdps, 'time': time.time()-start_time}
+        else:
+            return {'objective': None, 'solution': mask.copy(), 'num_problems': self.num_sdps, 'time': time.time()-start_time}
+
+
 
     def sparse_iteration(self, U):
         
