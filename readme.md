@@ -15,7 +15,7 @@ Implementation of the paper "[Optimal Solutions for Joint Beamforming and Antenn
 ## Proposed Solution
 <!-- ![Illustration of the Proposed method](img/bb_ml_process.png) -->
 <p align='center'>
-<img src="img/bb_ml_process.png" alt="Image description" style="width: 65%;">
+<img src="img/bb_ml_process.png" alt="Image description" style="width: 60%;">
 </p>
 
 ## Results
