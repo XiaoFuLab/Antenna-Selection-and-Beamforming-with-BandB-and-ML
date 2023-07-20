@@ -5,7 +5,7 @@ Implementation of the paper "[Optimal Solutions for Joint Beamforming and Antenn
 
 ## Beamforming and Antenna Selection Problem
 <p align='center'>
-<img src="img/bf_as_illustration.png" alt="Image description" style="width: 60%;">
+<img src="img/bf_as_illustration.png" alt="Image description" style="width: 50%;">
 </p>
 
 <p align='center'>
@@ -15,7 +15,7 @@ Implementation of the paper "[Optimal Solutions for Joint Beamforming and Antenn
 ## Proposed Solution
 <!-- ![Illustration of the Proposed method](img/bb_ml_process.png) -->
 <p align='center'>
-<img src="img/bb_ml_process.png" alt="Image description" style="width: 70%;">
+<img src="img/bb_ml_process.png" alt="Image description" style="width: 65%;">
 </p>
 
 ## Results
