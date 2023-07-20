@@ -20,8 +20,8 @@ Implementation of the paper "[Optimal Solutions for Joint Beamforming and Antenn
 
 ## Results
 <p align='center'>
-<img src="img/bb_conv.png" alt="Image description" style="margin-right: 20px; width: 40%;">
-<img src="img/table.png" alt="Image description" style="margin-left: 20px;width: 45%;">
+<img src="img/bb_conv.png" alt="Image description" style="margin-right: 20px; width: 45%;">
+<img src="img/table.png" alt="Image description" style="margin-left: 20px;width: 48%;">
 </p>
 
 
