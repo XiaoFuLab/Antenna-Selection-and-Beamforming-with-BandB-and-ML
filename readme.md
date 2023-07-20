@@ -5,22 +5,22 @@ Implementation of the paper "[Optimal Solutions for Joint Beamforming and Antenn
 
 ## Beamforming and Antenna Selection Problem
 <p align='center'>
-<img src="img/bf_as_illustration.png" alt="Image description" width="300">
+<img src="img/bf_as_illustration.png" alt="Image description" style="width: 75%;">
 </p>
 
 <p align='center'>
-<img src="img/problem.png" alt="Image description" width="300">
+<img src="img/problem.png" alt="Image description" style="width: 75%;">
 </p>
 
 ## Proposed Solution
 <!-- ![Illustration of the Proposed method](img/bb_ml_process.png) -->
 <p align='center'>
-<img src="img/bb_ml_process.png" alt="Image description" width="300">
+<img src="img/bb_ml_process.png" alt="Image description" width="500">
 </p>
 
 ## Results
 <p align='center'>
-<img src="img/bb_conv.png" alt="Image description" style="margin-right: 20px;" width="320">
+<img src="img/bb_conv.png" alt="Image description" style="margin-right: 20px;" width="400">
 <img src="img/table.png" alt="Image description" style="margin-left: 20px;"  width="340">
 </p>
 
